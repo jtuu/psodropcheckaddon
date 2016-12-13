@@ -35,8 +35,7 @@ local table_read_fallback = {
                 return v
             end
         end
-
-        return string.format("[%.6X]", key, 8)
+        return 0
     end
 }
 
@@ -81,7 +80,13 @@ local get_episode = function()
 end
 
 local get_areaname = function(area)
-    return episodes[get_episode()][area]
+    local ep = episodes[get_episode()]
+
+    if not ep then
+        return "Unknown"
+    end
+
+    return ep[area]
 end
 
 local get_current_areaname = function()
