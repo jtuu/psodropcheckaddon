@@ -6,6 +6,88 @@ local itemlist = {}
 local speciallist = {}
 local techlist = {}
 
+local areaptr = 0x00AC9D58
+
+local episodes = {
+    [1] = {
+        "Pioneer 2", "Forest 1", "Forest 2", "Caves 1", "Caves 2", "Caves 3",
+        "Mines 1", "Mines 2", "Ruins 1", "Ruins 2", "Ruins 3",
+        "Dragon", "De Rol Le", "Vol Opt", "Dark Falz",
+        "Lobby", "Temple", "Spaceship"
+    },
+    [2] = {
+        "Pioneer 2", "VR Temple Alpha", "VR Temple Beta", "VR Spaceship Alpha",
+        "VR Spaceship Beta", "Central Control Area", "Jungle Area North",
+        "Jungle Area East", "Mountain Area", "Seaside Area", "Seabed Upper Levels",
+        "Seabed Lower Levels", "Gal Gryphon", "Olga Flow", "Barba Ray", "Gol Dragon",
+        "Seaside Area", "Tower"
+    },
+    [4] = {
+        "Pioneer 2", "Crater East", "Crater West", "Crater South", "Crater North",
+        "Crater Interior", "Desert 1", "Desert 2", "Desert 3", "Saint Milion"
+    }
+}
+
+local table_read_fallback = {
+    __index = function(tbl, key)
+        for k,v in pairs(tbl) do
+            if key == k then
+                return v
+            end
+        end
+
+        return string.format("[%.6X]", key, 8)
+    end
+}
+
+local mapptr = 0x00AC9CF4
+local mapvals = {
+    [0xa15ba8] = "Forest",
+    [0xa15d5c] = "Caves",
+    [0xa15df8] = "Mines",
+    [0xa15c54] = "Ruins",
+
+    [0xa15f40] = "Temple",
+    [0xa15f0c] = "Spaceship",
+    [0xa15e2c] = "CCA",
+    [0xa15ed8] = "Seabed",
+
+    [0xa15f74] = "Crater",
+    [0xa16020] = "Crater interior",
+    [0xa16054] = "Desert"
+}
+setmetatable(mapvals, table_read_fallback)
+
+local episodemaps = {
+    ["Forest"] = 1,
+    ["Caves"] = 1,
+    ["Mines"] = 1,
+    ["Ruins"] = 1,
+
+    ["Temple"] = 2,
+    ["Spaceship"] = 2,
+    ["CCA"] = 2,
+    ["Seabed"] = 2,
+
+    ["Crater"] = 4,
+    ["Crater interior"] = 4,
+    ["Desert"] = 4
+}
+setmetatable(episodemaps, table_read_fallback)
+
+
+local get_episode = function()
+    return episodemaps[mapvals[pso.read_u32(mapptr)]]
+end
+
+local get_areaname = function(area)
+    return episodes[get_episode()][area]
+end
+
+local get_current_areaname = function()
+    return get_areaname(pso.read_u8(areaptr) + 1)
+end
+
 local function loadtable(file)
     local t = {}
     for line in io.lines(file) do
@@ -22,16 +104,7 @@ end
 
 local init = function()
     itemlist = loadtable(itemfile)
-    setmetatable(itemlist, {
-        __index = function(tbl, key)
-            for k,v in pairs(tbl) do
-                if key == k then
-                    return v
-                end
-            end
-            --return string.format("[%.6X]", bit.bswap(bit.lshift(key, 8)))
-            return string.format("[%.6X]", key, 8)
-        end})
+    setmetatable(itemlist, table_read_fallback)
     techlist = loadtable(techfile)
     speciallist = loadtable(specialfile)
     return {
@@ -135,10 +208,6 @@ local function scanfloor()
 
     --imgui.Text(string.format("pointer: 0x%x", floorptr))
 
-    --local drops = setmetatable({}, {
-    --                              __eq = arrays_eq
-    --                               })
-
     clear_table(drops)
 
     for area = 0, AREACOUNT do
@@ -159,7 +228,7 @@ local function scanfloor()
                 pso.read_mem(itembuf, offset, ITEMSIZE)
                 --imgui.Text("b: " .. tostring(array_to_string(itembuf)))
                 print(tostring(array_to_string(itembuf)))
-                table.insert(drops, itembuf)
+                table.insert(drops, {["item"] = itembuf, ["area"] = area, ["offset"] = offset})
                 --print(string.format("%d %d"))
             end
         end
@@ -285,9 +354,15 @@ local function itemtostring(item)
     end
 end
 
+local droplist_compare = function(a, b)
+
+    return a.area > b.area
+end
+
+local collapsible_states = {}
+
 local prevmaxy = 0
 local itercount = 0
-local astr = ""
 local present = function()
     imgui.Begin("Drop Checker")
 
@@ -306,20 +381,32 @@ local present = function()
             table.remove(droplist, 1)
         end
 
-        astr = ""
-        for i,drop in ipairs(droplist) do
-            local istr = itemtostring(drop)
-            if istr ~= nil then
-                astr = astr .. "\n"  .. istr
+        table.sort(droplist, droplist_compare)
+    end
+
+    itercount = itercount + 1
+
+    local prev_area = ""
+    local cur_area = get_current_areaname()
+    for i,drop in ipairs(droplist) do
+        local istr = itemtostring(drop.item)
+        if istr ~= nil then
+            local area = get_areaname(drop.area + 1)
+            if area ~= prev_area then
+                imgui.SetNextTreeNodeOpen(collapsible_states[area] or area == cur_area)
+                local is_open = imgui.CollapsingHeader(area)
+                collapsible_states[area] = is_open
+                if is_open then
+                    imgui.TextWrapped(istr)
+                end
+                prev_area = area
+            elseif area == cur_area then
+                imgui.TextWrapped(istr)
+                prev_area = area
             end
         end
     end
 
-    imgui.Text(astr)
-
-    itercount = itercount + 1
-
-    --imgui.Text(string.format("sc: %d %d -> %d %d", sy, sym, imgui.GetScrollY(), imgui.GetScrollMaxY()))
     if scrolldown then
         imgui.SetScrollY(imgui.GetScrollMaxY())
     end
