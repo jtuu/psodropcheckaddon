@@ -73,7 +73,7 @@ function arrays_eq(a, b)
    if acount ~= bcount then
       return false
    end
-   
+
    for i,v in ipairs(a) do
       if b[i] ~= v then
          return false
@@ -116,25 +116,35 @@ function difference(a, b)
    return result
 end
 
-local DROPCMPMETA = {__index = index_eq, __newindex=newindex}
+local function clear_table(t)
+  local next = next
+  local k = next(t)
+  while k ~= nil do
+    t[k] = nil
+    k = next(t, k)
+  end
+end
+
+local drops = {}
+setmetatable(drops, {__index = index_eq, __newindex=newindex})
 local function scanfloor()
    local floorptr = pso.read_u32(DROPTABLE_PTR) + 16
    if floorptr == 16 then
       return {}
    end
-   
+
    --imgui.Text(string.format("pointer: 0x%x", floorptr))
 
    --local drops = setmetatable({}, {
    --                              __eq = arrays_eq
    --                               })
-   local drops = {}
-   setmetatable(drops, DROPCMPMETA)
-   
+
+   clear_table(drops)
+
    for area = 0, AREACOUNT do
       for item = 0, MAXITEMS do
          local offset = floorptr + AREASTEP*area + ITEMSTEP*item
-         
+
          local itemid = bit.rshift(bit.bswap(pso.read_u32(offset)), 8)
          if itemid == 0 then
             break
@@ -149,13 +159,8 @@ local function scanfloor()
             pso.read_mem(itembuf, offset, ITEMSIZE)
             --imgui.Text("b: " .. tostring(array_to_string(itembuf)))
             print(tostring(array_to_string(itembuf)))
-            --table.insert(drops, itembuf)
+            table.insert(drops, itembuf)
             --print(string.format("%d %d"))
-            if drops[itembuf] ~= nil then
-               drops[itembuf] = drops[itembuf] + 1
-            else
-               drops[itembuf] = 1
-            end
          end
       end
    end
@@ -166,10 +171,10 @@ local function scanfloor()
   -- print(#diff)
    --print(printtable(diff, nil))
    --print("---")
-   diff = difference(drops, lastfloorscan)
-   lastfloorscan = drops
+   -- diff = difference(drops, lastfloorscan)
+   -- lastfloorscan = drops
 
-   return diff
+   return drops
 end
 
 
@@ -213,7 +218,7 @@ local function wepstring(item)
    end
 
    result = result .. string.format(" %d/%d/%d/%d|%d", native, abeast, machine, dark, hit)
-   
+
    return result
 end
 
@@ -282,7 +287,7 @@ end
 
 local prevmaxy = 0
 local itercount = 0
-
+local astr = ""
 local present = function()
    imgui.Begin("Drop Checker")
 
@@ -294,24 +299,22 @@ local present = function()
    end
 
    -- dont need to do this every frame
-   if itercount % 60 == 0 then
-      for i,drop in ipairs(scanfloor()) do
-         table.insert(droplist, drop)
+   if itercount % 20 == 0 then
+      droplist = scanfloor()
+      -- unsure if this actually speeds anything up
+      while #droplist > 100 do
+         table.remove(droplist, 1)
+      end
+
+      astr = ""
+      for i,drop in ipairs(droplist) do
+         local istr = itemtostring(drop)
+         if istr ~= nil then
+            astr = astr .. "\n"  .. istr
+         end
       end
    end
 
-   -- unsure if this actually speeds anything up
-   while #droplist > 100 do
-      table.remove(droplist, 1)
-   end
-
-   local astr = ""
-   for i,drop in ipairs(droplist) do
-      local istr = itemtostring(drop)
-      if istr ~= nil then
-         astr = astr .. "\n"  .. istr
-      end
-   end
    imgui.Text(astr)
 
    itercount = itercount + 1
@@ -322,7 +325,7 @@ local present = function()
    end
 
    prevmaxy = imgui.GetScrollMaxY()
-   
+
    imgui.End()
 end
 
