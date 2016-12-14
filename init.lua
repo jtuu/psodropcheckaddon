@@ -76,7 +76,7 @@ local function get_episode()
     return ZONE_EPISODES[ZONES[pso.read_u32(ZONE_PTR)]]
 end
 
-local function get_areaname()
+local function get_areaname(area)
     local ep = EPISODES[get_episode()]
     if not ep then return "Unknown" end
     return ep[area]
@@ -197,18 +197,9 @@ local function scanfloor()
             end
 
             if itemlist[itemid] ~= nil then
-                itembuf = {}
+                local itembuf = {}
                 pso.read_mem(itembuf, offset, ITEMSIZE)
-
-                local value = 0
-                for k,v in ipairs(itembuf) do
-                    value = value + v
-                end
-
-                table.insert(drops, {
-                    ["item"] = itembuf,
-                    ["area"] = area,
-                    ["value"] = value})
+                table.insert(drops, {["item"] = itembuf, ["area"] = area})
             end
         end
     end
@@ -324,7 +315,9 @@ end
 
 local droplist_compare = function(a, b)
     if a.area == b.area then
-        return a.value > b.value
+        if a.item[1] == b.item[1] then
+            return a.item[2] < b.item[2]
+        else return a.item[1] < b.item[1] end
     else return a.area > b.area end
 end
 
@@ -375,23 +368,21 @@ local present = function()
     end
 
     for i,drop in ipairs(droplist) do -- iterate through drops
-        local itemstr = drop.itemstr
-        if itemstr ~= nil then
-            local area = drop.areastr
-            local prev = droplist[i - 1]
+        if drop.itemstr ~= nil then
+            local prev = i > 1 and droplist[i - 1] or {}
             -- if item is in a different area than the previous one,
             -- add a CollapsingHeader
-            if area ~= prev.area then
+            if drop.areastr ~= prev.areastr then
                 -- set header to open if it has been clicked open or it is the current area
                 -- (this means current area menu can't be closed atm)
-                imgui.SetNextTreeNodeOpen(collapsible_states[area] == true or area == cur_area)
+                imgui.SetNextTreeNodeOpen(collapsible_states[drop.areastr] == true or drop.areastr == cur_area)
                 -- save the open state
-                local is_open = imgui.CollapsingHeader(area)
-                collapsible_states[area] = is_open
+                local is_open = imgui.CollapsingHeader(drop.areastr)
+                collapsible_states[drop.areastr] = is_open
                 -- add the text if the menu is open
-                if is_open then imgui.Text(itemstr) end
-            elseif area == cur_area then -- item is in same area as the previous one, continue drawing here
-                imgui.Text(itemstr)
+                if is_open then imgui.Text(drop.itemstr) end
+            elseif drop.areastr == cur_area then -- item is in same area as the previous one, continue drawing here
+                imgui.Text(drop.itemstr)
             end
         end
     end
