@@ -5,22 +5,23 @@ local itemlist = {}
 local speciallist = {}
 local techlist = {}
 
+local EPISODE_PTR = 0x00A9B1C8
 local AREA_PTR = 0x00AC9D58
 local EPISODES = {
-    [1] = {
+    [0] = {
         "Pioneer 2", "Forest 1", "Forest 2", "Caves 1", "Caves 2", "Caves 3",
         "Mines 1", "Mines 2", "Ruins 1", "Ruins 2", "Ruins 3",
         "Dragon", "De Rol Le", "Vol Opt", "Dark Falz",
         "Lobby", "Temple", "Spaceship"
     },
-    [2] = {
+    [1] = {
         "Pioneer 2", "VR Temple Alpha", "VR Temple Beta", "VR Spaceship Alpha",
         "VR Spaceship Beta", "Central Control Area", "Jungle Area North",
         "Jungle Area East", "Mountain Area", "Seaside Area", "Seabed Upper Levels",
         "Seabed Lower Levels", "Gal Gryphon", "Olga Flow", "Barba Ray", "Gol Dragon",
         "Seaside Area", "Tower"
     },
-    [4] = {
+    [2] = {
         "Pioneer 2", "Crater East", "Crater West", "Crater South", "Crater North",
         "Crater Interior", "Desert 1", "Desert 2", "Desert 3", "Saint Milion"
     }
@@ -37,43 +38,8 @@ local table_read_fallback = {
     end
 }
 
-local ZONE_PTR = 0x00AC9CF4
-local ZONES = {
-    [0xa15ba8] = "Forest",
-    [0xa15d5c] = "Caves",
-    [0xa15df8] = "Mines",
-    [0xa15c54] = "Ruins",
-
-    [0xa15f40] = "Temple",
-    [0xa15f0c] = "Spaceship",
-    [0xa15e2c] = "CCA",
-    [0xa15ed8] = "Seabed",
-
-    [0xa15f74] = "Crater",
-    [0xa16020] = "Crater interior",
-    [0xa16054] = "Desert"
-}
-setmetatable(ZONES, table_read_fallback)
-
-local ZONE_EPISODES = {
-    ["Forest"] = 1,
-    ["Caves"] = 1,
-    ["Mines"] = 1,
-    ["Ruins"] = 1,
-
-    ["Temple"] = 2,
-    ["Spaceship"] = 2,
-    ["CCA"] = 2,
-    ["Seabed"] = 2,
-
-    ["Crater"] = 4,
-    ["Crater interior"] = 4,
-    ["Desert"] = 4
-}
-setmetatable(ZONE_EPISODES, table_read_fallback)
-
 local function get_episode()
-    return ZONE_EPISODES[ZONES[pso.read_u32(ZONE_PTR)]]
+    return pso.read_u8(EPISODE_PTR)
 end
 
 local function get_areaname(area)
