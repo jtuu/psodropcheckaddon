@@ -223,7 +223,7 @@ local function scanfloor()
             if itemid == 0 then
                 break
             end
-            print(string.format("itemid: %.6X %d", itemid, itemid))
+            --print(string.format("itemid: %.6X %d", itemid, itemid))
             --imgui.Text(string.format("iid: 0x%X", itemid))
             --imgui.Text(string.format("?: %X %s", wep, itemlist[wep]))
             if itemlist[itemid] ~= nil then
@@ -232,8 +232,13 @@ local function scanfloor()
                 --setmetatable(itembuf, ITEMCMPMETA)
                 pso.read_mem(itembuf, offset, ITEMSIZE)
                 --imgui.Text("b: " .. tostring(array_to_string(itembuf)))
-                print(tostring(array_to_string(itembuf)))
-                table.insert(drops, {["item"] = itembuf, ["area"] = area, ["offset"] = offset})
+                --print(tostring(array_to_string(itembuf)))
+                local value = 0
+                for k,v in ipairs(itembuf) do
+                    value = value + v
+                end
+
+                table.insert(drops, {["item"] = itembuf, ["area"] = area, ["value"] = value})
                 --print(string.format("%d %d"))
             end
         end
@@ -360,14 +365,17 @@ local function itemtostring(item)
 end
 
 local droplist_compare = function(a, b)
+    if a.area == b.area then
+        return a.value > b.value
+    end
 
     return a.area > b.area
 end
 
 local collapsible_states = {}
-
 local prevmaxy = 0
 local itercount = 0
+local prev_area = ""
 local present = function()
     imgui.Begin("Drop Checker")
 
@@ -391,23 +399,31 @@ local present = function()
 
     itercount = itercount + 1
 
-    local prev_area = ""
+    local area0 = ""
     local cur_area = get_current_areaname()
+
+    if prev_area ~= cur_area then
+        for k,v in pairs(collapsible_states) do
+            collapsible_states[k] = false
+        end
+        prev_area = cur_area
+    end
+
     for i,drop in ipairs(droplist) do
         local istr = itemtostring(drop.item)
         if istr ~= nil then
             local area = get_areaname(drop.area + 1)
-            if area ~= prev_area then
-                imgui.SetNextTreeNodeOpen(collapsible_states[area] or area == cur_area)
+            if area ~= area0 then
+                imgui.SetNextTreeNodeOpen(collapsible_states[area] == true or area == cur_area)
                 local is_open = imgui.CollapsingHeader(area)
                 collapsible_states[area] = is_open
                 if is_open then
                     imgui.TextWrapped(istr)
                 end
-                prev_area = area
+                area0 = area
             elseif area == cur_area then
                 imgui.TextWrapped(istr)
-                prev_area = area
+                area0 = area
             end
         end
     end
