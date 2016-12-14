@@ -1,4 +1,3 @@
-
 local itemfile = "addons/DropChecker/items.txt"
 local specialfile = "addons/DropChecker/specials.txt"
 local techfile = "addons/DropChecker/techs.txt"
@@ -6,9 +5,8 @@ local itemlist = {}
 local speciallist = {}
 local techlist = {}
 
-local areaptr = 0x00AC9D58
-
-local episodes = {
+local AREA_PTR = 0x00AC9D58
+local EPISODES = {
     [1] = {
         "Pioneer 2", "Forest 1", "Forest 2", "Caves 1", "Caves 2", "Caves 3",
         "Mines 1", "Mines 2", "Ruins 1", "Ruins 2", "Ruins 3",
@@ -35,12 +33,12 @@ local table_read_fallback = {
                 return v
             end
         end
-        return 0
+        return nil
     end
 }
 
-local mapptr = 0x00AC9CF4
-local mapvals = {
+local ZONE_PTR = 0x00AC9CF4
+local ZONES = {
     [0xa15ba8] = "Forest",
     [0xa15d5c] = "Caves",
     [0xa15df8] = "Mines",
@@ -55,9 +53,9 @@ local mapvals = {
     [0xa16020] = "Crater interior",
     [0xa16054] = "Desert"
 }
-setmetatable(mapvals, table_read_fallback)
+setmetatable(ZONES, table_read_fallback)
 
-local episodemaps = {
+local ZONE_EPISODES = {
     ["Forest"] = 1,
     ["Caves"] = 1,
     ["Mines"] = 1,
@@ -72,25 +70,20 @@ local episodemaps = {
     ["Crater interior"] = 4,
     ["Desert"] = 4
 }
-setmetatable(episodemaps, table_read_fallback)
+setmetatable(ZONE_EPISODES, table_read_fallback)
 
-
-local get_episode = function()
-    return episodemaps[mapvals[pso.read_u32(mapptr)]]
+local function get_episode()
+    return ZONE_EPISODES[ZONES[pso.read_u32(ZONE_PTR)]]
 end
 
-local get_areaname = function(area)
-    local ep = episodes[get_episode()]
-
-    if not ep then
-        return "Unknown"
-    end
-
+local function get_areaname()
+    local ep = EPISODES[get_episode()]
+    if not ep then return "Unknown" end
     return ep[area]
 end
 
-local get_current_areaname = function()
-    return get_areaname(pso.read_u8(areaptr) + 1)
+local function get_current_areaname()
+    return get_areaname(pso.read_u8(AREA_PTR) + 1)
 end
 
 local function loadtable(file)
@@ -98,16 +91,13 @@ local function loadtable(file)
     for line in io.lines(file) do
         local sp = {}
         for value, wep in string.gmatch(line, '(%w+) (.+)') do
-            --print(tonumber(value, 16))
             t[tonumber(value, 16)] = wep
         end
     end
     return t
 end
 
-
-
-local init = function()
+local function init()
     itemlist = loadtable(itemfile)
     setmetatable(itemlist, table_read_fallback)
     techlist = loadtable(techfile)
@@ -178,22 +168,6 @@ function newindex(tbl, key, value)
     rawset(tbl, key, value)
 end
 
-function difference(a, b)
-    local result = {}
-    for k,v in pairs(a) do
-        if b[k] ~= nil then
-            local count = b[k]
-            while v > count do
-                table.insert(result, k)
-                count = count + 1
-            end
-        else
-            table.insert(result, k)
-        end
-    end
-    return result
-end
-
 local function clear_table(t)
     local next = next
     local k = next(t)
@@ -211,8 +185,6 @@ local function scanfloor()
         return {}
     end
 
-    --imgui.Text(string.format("pointer: 0x%x", floorptr))
-
     clear_table(drops)
 
     for area = 0, AREACOUNT do
@@ -223,35 +195,23 @@ local function scanfloor()
             if itemid == 0 then
                 break
             end
-            --print(string.format("itemid: %.6X %d", itemid, itemid))
-            --imgui.Text(string.format("iid: 0x%X", itemid))
-            --imgui.Text(string.format("?: %X %s", wep, itemlist[wep]))
+
             if itemlist[itemid] ~= nil then
-                --drops.insert(itemlist[wep])
                 itembuf = {}
-                --setmetatable(itembuf, ITEMCMPMETA)
                 pso.read_mem(itembuf, offset, ITEMSIZE)
-                --imgui.Text("b: " .. tostring(array_to_string(itembuf)))
-                --print(tostring(array_to_string(itembuf)))
+
                 local value = 0
                 for k,v in ipairs(itembuf) do
                     value = value + v
                 end
 
-                table.insert(drops, {["item"] = itembuf, ["area"] = area, ["value"] = value})
-                --print(string.format("%d %d"))
+                table.insert(drops, {
+                    ["item"] = itembuf,
+                    ["area"] = area,
+                    ["value"] = value})
             end
         end
     end
-
-    --print(#drops)
-    --print(printtable(drops, nil))
-    --print(#lastfloorscan)
-    -- print(#diff)
-    --print(printtable(diff, nil))
-    --print("---")
-    -- diff = difference(drops, lastfloorscan)
-    -- lastfloorscan = drops
 
     return drops
 end
@@ -259,7 +219,6 @@ end
 
 local function wepstring(item)
     local wepid = item[1] * math.pow(2, 16) + item[2] * math.pow(2, 8) + item[3]
-    --imgui.Text(string.format("wid: 0x%X", wepid))
 
     local native = 0
     local abeast = 0
@@ -342,7 +301,6 @@ local function techstring(item)
 end
 
 local function itemtostring(item)
-    --print("item: " .. tostring(array_to_string(item)))
     if item[1] == 0x00 then
         return wepstring(item)
     elseif item[1] == 0x01 then
@@ -367,16 +325,20 @@ end
 local droplist_compare = function(a, b)
     if a.area == b.area then
         return a.value > b.value
-    end
-
-    return a.area > b.area
+    else return a.area > b.area end
 end
 
-local collapsible_states = {}
 local prevmaxy = 0
-local itercount = 0
+local UPDATE_INTERVAL = 20
+local itercount = UPDATE_INTERVAL - 1
+
 local prev_area = ""
+local cur_area = ""
+local collapsible_states = {}
+
 local present = function()
+    itercount = itercount + 1
+
     imgui.Begin("Drop Checker")
 
     local sy = imgui.GetScrollY()
@@ -387,7 +349,7 @@ local present = function()
     end
 
     -- dont need to do this every frame
-    if itercount % 20 == 0 then
+    if itercount % UPDATE_INTERVAL == 0 then
         droplist = scanfloor()
         -- unsure if this actually speeds anything up
         while #droplist > 100 do
@@ -395,35 +357,41 @@ local present = function()
         end
 
         table.sort(droplist, droplist_compare)
+        cur_area = get_current_areaname()
+
+        -- cache the stringified item and area
+        for i,drop in ipairs(droplist) do
+            drop.itemstr = itemtostring(drop.item)
+            drop.areastr = get_areaname(drop.area + 1)
+        end
+
+        itercount = 0
     end
 
-    itercount = itercount + 1
-
-    local area0 = ""
-    local cur_area = get_current_areaname()
-
+    -- player changed areas, open/close menus
     if prev_area ~= cur_area then
-        for k,v in pairs(collapsible_states) do
-            collapsible_states[k] = false
-        end
+        clear_table(collapsible_states)
         prev_area = cur_area
     end
 
-    for i,drop in ipairs(droplist) do
-        local istr = itemtostring(drop.item)
-        if istr ~= nil then
-            local area = get_areaname(drop.area + 1)
-            if area ~= area0 then
+    for i,drop in ipairs(droplist) do -- iterate through drops
+        local itemstr = drop.itemstr
+        if itemstr ~= nil then
+            local area = drop.areastr
+            local prev = droplist[i - 1]
+            -- if item is in a different area than the previous one,
+            -- add a CollapsingHeader
+            if area ~= prev.area then
+                -- set header to open if it has been clicked open or it is the current area
+                -- (this means current area menu can't be closed atm)
                 imgui.SetNextTreeNodeOpen(collapsible_states[area] == true or area == cur_area)
+                -- save the open state
                 local is_open = imgui.CollapsingHeader(area)
                 collapsible_states[area] = is_open
-                if is_open then
-                    imgui.TextWrapped(istr)
-                end
-                area0 = area
-            elseif area == cur_area then
-                imgui.TextWrapped(istr)
-                area0 = area
+                -- add the text if the menu is open
+                if is_open then imgui.Text(itemstr) end
+            elseif area == cur_area then -- item is in same area as the previous one, continue drawing here
+                imgui.Text(itemstr)
             end
         end
     end
@@ -433,19 +401,13 @@ local present = function()
     end
 
     prevmaxy = imgui.GetScrollMaxY()
-
     imgui.End()
 end
 
 pso.on_init(init)
 pso.on_present(present)
---pso.on_key_pressed(key_pressed)
---pso.on_key_released(key_released)
 
--- This isn't necessary, but may be useful if you want to use another addons'
--- code; you can retrieve an addon's module with require('AddonName').
 return {
     init = init,
-    present = present,
---key_pressed = key_pressed
+    present = present
 }
