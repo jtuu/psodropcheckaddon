@@ -165,7 +165,7 @@ local function scanfloor()
             if itemlist[itemid] ~= nil then
                 local itembuf = {}
                 pso.read_mem(itembuf, offset, ITEMSIZE)
-                table.insert(drops, {["item"] = itembuf, ["area"] = area})
+                table.insert(drops, {["item"] = itembuf, ["area"] = area, ["offset"] = offset})
             end
         end
     end
@@ -347,7 +347,7 @@ local present = function()
                 collapsible_states[drop.areastr] = is_open
                 -- add the text if the menu is open
                 if is_open then imgui.Text(drop.itemstr) end
-            elseif drop.areastr == cur_area then -- item is in same area as the previous one, continue drawing here
+            elseif collapsible_states[drop.areastr] == true then -- menu is open so lets continue drawing
                 imgui.Text(drop.itemstr)
             end
         end
