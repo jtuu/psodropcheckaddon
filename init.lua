@@ -300,7 +300,7 @@ local function magstring(item)
 end
 
 local function techstring(item)
-    local level = item[1]+1
+    local level = item[3] + 1
     local techid = item[5]
 
     return string.format("%s %d", techlist[techid].name, level)
