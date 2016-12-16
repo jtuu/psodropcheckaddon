@@ -1,6 +1,6 @@
-local itemfile = "addons/DropChecker/items.txt"
-local specialfile = "addons/DropChecker/specials.txt"
-local techfile = "addons/DropChecker/techs.txt"
+local itemfile = "addons/psodropcheckaddon/items.txt"
+local specialfile = "addons/psodropcheckaddon/specials.txt"
+local techfile = "addons/psodropcheckaddon/techs.txt"
 local itemlist = {}
 local speciallist = {}
 local techlist = {}
@@ -25,6 +25,43 @@ local EPISODES = {
         "Pioneer 2", "Crater East", "Crater West", "Crater South", "Crater North",
         "Crater Interior", "Desert 1", "Desert 2", "Desert 3", "Saint Milion"
     }
+}
+
+local function scalergb(rgb)
+    local scaled = {}
+    for k,v in ipairs(rgb) do
+        table.insert(scaled, v / 255)
+    end
+    return scaled
+end
+
+local ITEMTYPE = {
+    WEAPON = 0,
+    ARMOR = 1,
+    SHIELD = 2,
+    UNIT = 3,
+    MAG = 4,
+    TECH = 5,
+    CONSUMABLE = 6,
+    MISC = 7,
+    RARE = 8
+}
+local COLOR = {
+    ORANGE = scalergb({255, 131, 50, 255}),
+    BLUE = scalergb({48, 111, 179, 255}),
+    GREEN = scalergb({45, 144, 27, 255}),
+    RED = scalergb({255, 0, 0, 255})
+}
+local ITEMCOLOR = {
+    [ITEMTYPE.WEAPON] = COLOR.ORANGE,
+    [ITEMTYPE.ARMOR] = COLOR.BLUE,
+    [ITEMTYPE.SHIELD] = COLOR.BLUE,
+    [ITEMTYPE.UNIT] = COLOR.BLUE,
+    [ITEMTYPE.MAG] = COLOR.BLUE,
+    [ITEMTYPE.TECH] = COLOR.GREEN,
+    [ITEMTYPE.CONSUMABLE] = COLOR.GREEN,
+    [ITEMTYPE.MISC] = COLOR.GREEN,
+    [ITEMTYPE.RARE] = COLOR.RED
 }
 
 local table_read_fallback = {
@@ -55,10 +92,17 @@ end
 local function loadtable(file)
     local t = {}
     for line in io.lines(file) do
-        local sp = {}
-        for value, wep in string.gmatch(line, '(%w+) (.+)') do
-            t[tonumber(value, 16)] = wep
+        local parsed = {}
+        for part in string.gmatch(line, "[^,]+") do
+            table.insert(parsed, part)
         end
+        local o = {name = parsed[2]}
+        if parsed[3] ~= nil then
+            o.rare = tonumber(parsed[3]) == 1
+        else
+            o.rare = false
+        end
+        t[tonumber(parsed[1], 16)] = o
     end
     return t
 end
@@ -165,7 +209,12 @@ local function scanfloor()
             if itemlist[itemid] ~= nil then
                 local itembuf = {}
                 pso.read_mem(itembuf, offset, ITEMSIZE)
-                table.insert(drops, {["item"] = itembuf, ["area"] = area, ["offset"] = offset})
+                table.insert(drops, {
+                    item = itembuf,
+                    area = area,
+                    offset = offset,
+                    rare = itemlist[itemid].rare
+                })
             end
         end
     end
@@ -203,10 +252,10 @@ local function wepstring(item)
 
     local result = ""
     if bit.band(item[5], 0x3F) ~= 0 then
-        result = result .. speciallist[bit.band(item[5], 0x3F)] .. " "
+        result = result .. speciallist[bit.band(item[5], 0x3F)].name .. " "
     end
 
-    result = result .. itemlist[wepid]
+    result = result .. itemlist[wepid].name
 
     if item[4] ~= 0 then
         result = result .. " +" .. tostring(item[4])
@@ -223,7 +272,7 @@ local function armorstring(item)
     local dfp = item[7]
     local evp = item[9]
 
-    return string.format("%s [%ds +%dd +%de]", itemlist[armorid], slots, dfp, evp)
+    return string.format("%s [%ds +%dd +%de]", itemlist[armorid].name, slots, dfp, evp)
 end
 
 
@@ -232,49 +281,63 @@ local function shieldstring(item)
     local dfp = item[7]
     local evp = item[9]
 
-    return string.format("%s [+%dd +%de]", itemlist[shieldid], dfp, evp)
+    return string.format("%s [+%dd +%de]", itemlist[shieldid].name, dfp, evp)
 end
 
 local function miscstring(item)
     local miscid = item[1] * math.pow(2, 16) + item[2] * math.pow(2, 8) + item[3]
 
     if item[6] > 0 then
-        return string.format("%s x%d", itemlist[miscid], item[6])
+        return string.format("%s x%d", itemlist[miscid].name, item[6])
     end
-    return itemlist[miscid]
+    return itemlist[miscid].name
 end
 
 -- TODO!
 local function magstring(item)
     local magid = item[1] * math.pow(2, 16) + item[2] * math.pow(2, 8) + item[3]
-    return itemlist[magid]
+    return itemlist[magid].name
 end
 
 local function techstring(item)
     local level = item[1]+1
     local techid = item[5]
 
-    return string.format("%s %d", techlist[techid], level)
+    return string.format("%s %d", techlist[techid].name, level)
 end
 
-local function itemtostring(item)
+local function itemtostring(item, type)
+    if     type == ITEMTYPE.WEAPON then return wepstring(item)
+    elseif type == ITEMTYPE.ARMOR then return armorstring(item)
+    elseif type == ITEMTYPE.SHIELD then return shieldstring(item)
+    elseif type == ITEMTYPE.UNIT then return miscstring(item)
+    elseif type == ITEMTYPE.MAG then return magstring(item)
+    elseif type == ITEMTYPE.TECH then return techstring(item)
+    elseif type == ITEMTYPE.CONSUMABLE then return miscstring(item)
+    elseif type == ITEMTYPE.MISC then return miscstring(item)
+    end
+end
+
+local function get_itemtype(item)
     if item[1] == 0x00 then
-        return wepstring(item)
+        return ITEMTYPE.WEAPON
     elseif item[1] == 0x01 then
         if item[2] == 0x01 then
-            return armorstring(item)
+            return ITEMTYPE.ARMOR
         elseif item[2] == 0x02 then
-            return shieldstring(item)
+            return ITEMTYPE.SHIELD
         elseif item[2] == 0x03 then
-            return miscstring(item)
+            return ITEMTYPE.UNIT
         end
     elseif item[1] == 0x02 then
-        return magstring(item)
+        return ITEMTYPE.MAG
     elseif item[1] == 0x03 then
         if item[2] == 0x02 then
-            return techstring(item)
+            return ITEMTYPE.TECH
+        elseif item[2] < 0x0c then
+            return ITEMTYPE.CONSUMABLE
         else
-            return miscstring(item)
+            return ITEMTYPE.MISC
         end
     end
 end
@@ -320,7 +383,8 @@ local present = function()
 
         -- cache the stringified item and area
         for i,drop in ipairs(droplist) do
-            drop.itemstr = itemtostring(drop.item)
+            drop.type = get_itemtype(drop.item)
+            drop.itemstr = itemtostring(drop.item, drop.type)
             drop.areastr = get_areaname(drop.area + 1)
         end
 
@@ -345,10 +409,13 @@ local present = function()
                 -- save the open state
                 local is_open = imgui.CollapsingHeader(drop.areastr)
                 collapsible_states[drop.areastr] = is_open
-                -- add the text if the menu is open
-                if is_open then imgui.Text(drop.itemstr) end
-            elseif collapsible_states[drop.areastr] == true then -- menu is open so lets continue drawing
-                imgui.Text(drop.itemstr)
+            end
+
+            -- if menu is open, draw the items inside it
+            if collapsible_states[drop.areastr] == true then
+                -- prefer rare coloring over the items natural type color
+                local color = drop.rare and ITEMCOLOR[ITEMTYPE.RARE] or ITEMCOLOR[drop.type]
+                imgui.TextColored(color[1], color[2], color[3], color[4], drop.itemstr)
             end
         end
     end
